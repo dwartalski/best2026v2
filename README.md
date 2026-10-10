@@ -1,36 +1,65 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# MemeHistory
 
-## Getting Started
+Edukacyjny generator memów wideo w stylu "face-paste edit": oryginalny klip mema,
+wklejona twarz postaci historycznej, tekst wypełniony metodą slot-filling i krótki
+kontekst historyczny z cytatami ze źródeł.
 
-First, run the development server:
+## Start
 
 ```bash
+npm install            # postinstall kopiuje WASM MediaPipe i pobiera model do public/mediapipe
+cp .env.example .env.local   # uzupełnij ANTHROPIC_API_KEY
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Assety dodajesz ręcznie: klipy do `public/templates`, twarze PNG do `public/faces`
+(instrukcje w README w tych folderach).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Struktura
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```
+app/
+  api/generate/route.ts   POST: źródła -> LLM -> weryfikacja -> JSON
+  page.tsx                stan aplikacji i układ ekranu
+components/               ModeSwitch, TemplateGrid, GeneratorForm, MemePreview, ContextSheet
+data/                     templates.ts, characters.ts, demoResponses.ts (tryb offline)
+lib/
+  schemas.ts              typy + schematy zod
+  matchCharacter.ts       temat -> postać po keywords
+  sources.ts              kuratorskie fakty + Wikipedia, identyfikatory S1, S2...
+  prompt.ts               prompt systemowy i wiadomość użytkownika
+  llm.ts                  wywołanie Claude (structured output)
+  verify.ts               sourceId, dosłowne cytaty, URL-e, struktura szablonu
+  faceTracker.ts          MediaPipe FaceLandmarker, wygładzanie, fallback na keyframes
+  faceSticker.ts          PNG twarzy -> naklejka z białym obrysem
+  drawFrame.ts            jedna funkcja rysująca klatkę (podgląd i eksport)
+  exportVideo.ts          captureStream + audio + MediaRecorder
+scripts/                  setup-mediapipe.mjs, cut_face.py
+```
 
-## Learn More
+## Checklista przed demo
 
-To learn more about Next.js, take a look at the following resources:
+Testy
+- [ ] Chrome (desktop i Android) oraz Safari na iPhonie: podgląd gra, twarz trzyma się głowy.
+- [ ] Eksport: pobrany plik ma dźwięk oryginału, pełną długość i wygląda jak podgląd
+      (Safari zapisuje .mp4, starszy Chrome .webm).
+- [ ] Brak twarzy w kadrze / twarz bokiem: wklejka przechodzi na `faceKeyframes`
+      i nie skacze. Dla każdego klipu dopasuj keyframes ręcznie.
+- [ ] Wszystkie 3 tryby, temat spoza bazy (komunikat zamiast mema), `insufficientSources`.
+- [ ] "Zmień twarz" podmienia postać bez zapytania do API.
+- [ ] Długi tekst mema: belka łamie linie i nie zasłania twarzy.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Assety
+- [ ] Klipy: 9:16, do 10 s, H.264 + AAC, nazwy jak w `data/templates.ts`.
+- [ ] Twarze: PNG z przezroczystym tłem, sama głowa, nazwy jak w `data/characters.ts`.
+- [ ] `originalText` i `textTemplate` przepisane z prawdziwych memów dla tych klipów.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Brak internetu na sali
+- [ ] `NEXT_PUBLIC_OFFLINE_DEMO=1` w `.env.local` i ponowny build: odpowiedzi idą
+      z `data/demoResponses.ts` (podmień je wcześniej na zapisane odpowiedzi z API).
+- [ ] MediaPipe działa lokalnie z `public/mediapipe` (sprawdź, że jest tam `face_landmarker.task`).
+- [ ] Uruchom `npm run build && npm run start` na laptopie jako plan B dla Vercela.
+- [ ] Nagraj wcześniej 2-3 gotowe memy jako plan C.
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Wdrożenie
+- [ ] `ANTHROPIC_API_KEY` (i zalecane `WIKIPEDIA_USER_AGENT`) ustawione w Vercelu.
