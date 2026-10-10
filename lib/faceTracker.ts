@@ -25,6 +25,7 @@ const LEFT_EYE = [362, 263];
 const FOREHEAD = 10;
 const CHIN = 152;
 
+const MAX_FACES = 4;
 const SMOOTHING = 0.45;
 // Po zgubieniu twarzy trzymamy ostatnią pozycję przez chwilę, zanim przejdziemy na klatki kluczowe.
 const HOLD_LAST_POSE_MS = 300;
@@ -43,7 +44,7 @@ async function createLandmarker(): Promise<FaceLandmarker> {
     FaceLandmarker.createFromOptions(fileset, {
       baseOptions: { modelAssetPath, delegate },
       runningMode: "VIDEO",
-      numFaces: 1,
+      numFaces: MAX_FACES,
     });
 
   try {
@@ -61,6 +62,46 @@ export function loadFaceLandmarker(): Promise<FaceLandmarker> {
   });
   return landmarkerPromise;
 }
+
+// detectForVideo wymaga ściśle rosnących znaczników czasu w obrębie całego
+// landmarkera (współdzielą go podgląd i extractFrames), więc licznik jest globalny.
+let lastTimestamp = 0;
+
+/** Wykrywa wszystkie twarze na bieżącej klatce wideo. */
+export function detectFaces(landmarker: FaceLandmarker, video: HTMLVideoElement): FacePose[] {
+  if (video.readyState < 2 || video.videoWidth === 0) return [];
+  lastTimestamp = Math.max(performance.now(), lastTimestamp + 1);
+
+  let faces;
+  try {
+    faces = landmarker.detectForVideo(video, lastTimestamp).faceLandmarks;
+  } catch {
+    return [];
+  }
+
+  // Landmarki są znormalizowane osobno w X i Y; kąt i odległości liczymy w pikselach.
+  const { videoWidth: width, videoHeight: height } = video;
+  return faces.map((landmarks) => {
+    const midpoint = (a: number, b: number) => ({
+      x: ((landmarks[a].x + landmarks[b].x) / 2) * width,
+      y: ((landmarks[a].y + landmarks[b].y) / 2) * height,
+    });
+    const rightEye = midpoint(RIGHT_EYE[0], RIGHT_EYE[1]);
+    const leftEye = midpoint(LEFT_EYE[0], LEFT_EYE[1]);
+    const center = midpoint(FOREHEAD, CHIN);
+    const dx = leftEye.x - rightEye.x;
+    const dy = leftEye.y - rightEye.y;
+    return {
+      x: center.x / width,
+      y: center.y / height,
+      scale: Math.hypot(dx, dy) / width,
+      rotation: Math.atan2(dy, dx),
+    };
+  });
+}
+
+const distance = (a: { x: number; y: number }, b: { x: number; y: number }) =>
+  Math.hypot(a.x - b.x, a.y - b.y);
 
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 
@@ -99,14 +140,23 @@ export function poseFromKeyframes(
 
 export class FaceTracker {
   private smoothed: FacePose | null = null;
+  /** Ostatnia znana pozycja śledzonej twarzy; po niej rozpoznajemy "tę samą" twarz w kolejnej klatce. */
+  private anchor: { x: number; y: number } | null = null;
+  private anchorPinned = false;
   private lastDetectionAt = -Infinity;
   private lastMediaTime = 0;
-  private lastTimestamp = 0;
 
   constructor(
     private readonly landmarker: FaceLandmarker | null,
     private readonly keyframes?: FaceKeyframe[],
   ) {}
+
+  /** Użytkownik wskazał twarz (współrzędne 0..1 klatki wideo): od teraz śledzimy najbliższą temu punktowi. */
+  pickFaceAt(point: { x: number; y: number }) {
+    this.anchor = point;
+    this.anchorPinned = true;
+    this.smoothed = null;
+  }
 
   /** Zwraca pozycję twarzy dla bieżącej klatki albo null, gdy nie ma czego wkleić. */
   track(video: HTMLVideoElement): FacePose | null {
@@ -117,14 +167,16 @@ export class FaceTracker {
     if (Math.abs(mediaTime - this.lastMediaTime) > 0.5) {
       this.smoothed = null;
       this.lastDetectionAt = -Infinity;
+      if (!this.anchorPinned) this.anchor = null;
     }
     this.lastMediaTime = mediaTime;
 
-    const detected = this.detect(video, now);
+    const detected = this.selectFace(this.landmarker ? detectFaces(this.landmarker, video) : []);
     if (detected) {
       this.smoothed = this.smoothed
         ? lerpPose(this.smoothed, detected, SMOOTHING)
         : detected;
+      this.anchor = { x: detected.x, y: detected.y };
       this.lastDetectionAt = now;
       return this.smoothed;
     }
@@ -136,45 +188,13 @@ export class FaceTracker {
     return poseFromKeyframes(this.keyframes, mediaTime);
   }
 
-  private detect(video: HTMLVideoElement, now: number): FacePose | null {
-    if (!this.landmarker || video.readyState < 2 || video.videoWidth === 0) {
-      return null;
-    }
-    // detectForVideo wymaga ściśle rosnących znaczników czasu, więc nie używamy currentTime.
-    const timestamp = Math.max(now, this.lastTimestamp + 1);
-    this.lastTimestamp = timestamp;
-
-    let landmarks;
-    try {
-      landmarks = this.landmarker.detectForVideo(video, timestamp).faceLandmarks[0];
-    } catch {
-      return null;
-    }
-    if (!landmarks) return null;
-
-    // Landmarki są znormalizowane osobno w X i Y; kąt i odległości liczymy w pikselach.
-    const { videoWidth: width, videoHeight: height } = video;
-    const point = (index: number) => ({
-      x: landmarks[index].x * width,
-      y: landmarks[index].y * height,
+  /** Bez punktu odniesienia: największa twarz. Z nim: ta, której środek jest najbliżej. */
+  private selectFace(faces: FacePose[]): FacePose | null {
+    if (faces.length === 0) return null;
+    const anchor = this.anchor;
+    return faces.reduce((best, face) => {
+      if (anchor) return distance(face, anchor) < distance(best, anchor) ? face : best;
+      return face.scale > best.scale ? face : best;
     });
-    const midpoint = ([a, b]: number[]) => {
-      const p = point(a);
-      const q = point(b);
-      return { x: (p.x + q.x) / 2, y: (p.y + q.y) / 2 };
-    };
-
-    const rightEye = midpoint(RIGHT_EYE);
-    const leftEye = midpoint(LEFT_EYE);
-    const center = midpoint([FOREHEAD, CHIN]);
-    const dx = leftEye.x - rightEye.x;
-    const dy = leftEye.y - rightEye.y;
-
-    return {
-      x: center.x / width,
-      y: center.y / height,
-      scale: Math.hypot(dx, dy) / width,
-      rotation: Math.atan2(dy, dx),
-    };
   }
 }

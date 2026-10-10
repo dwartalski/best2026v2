@@ -21,6 +21,30 @@ export interface FrameInput {
   text: string;
 }
 
+/** Prostokąt, w którym klatka wideo ląduje na canvasie przy dopasowaniu "cover". */
+function coverRect(video: HTMLVideoElement) {
+  const cover = Math.max(CANVAS_WIDTH / video.videoWidth, CANVAS_HEIGHT / video.videoHeight);
+  const width = video.videoWidth * cover;
+  const height = video.videoHeight * cover;
+  return { x: (CANVAS_WIDTH - width) / 2, y: (CANVAS_HEIGHT - height) / 2, width, height };
+}
+
+/**
+ * Zamienia punkt na canvasie (0..1 szerokości i wysokości) na współrzędne
+ * klatki wideo (0..1), czyli ten sam układ, w którym żyje FacePose.
+ */
+export function canvasToVideoPoint(
+  video: HTMLVideoElement,
+  point: { x: number; y: number },
+): { x: number; y: number } | null {
+  if (video.videoWidth === 0 || video.videoHeight === 0) return null;
+  const rect = coverRect(video);
+  return {
+    x: (point.x * CANVAS_WIDTH - rect.x) / rect.width,
+    y: (point.y * CANVAS_HEIGHT - rect.y) / rect.height,
+  };
+}
+
 function wrapText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string[] {
   const lines: string[] = [];
   let current = "";
@@ -77,11 +101,12 @@ export function drawFrame(ctx: CanvasRenderingContext2D, input: FrameInput) {
   const { videoWidth, videoHeight } = video;
   if (videoWidth > 0 && videoHeight > 0) {
     // Dopasowanie "cover": klip wypełnia kadr 9:16, nadmiar jest przycinany.
-    const cover = Math.max(CANVAS_WIDTH / videoWidth, CANVAS_HEIGHT / videoHeight);
-    const drawnWidth = videoWidth * cover;
-    const drawnHeight = videoHeight * cover;
-    const offsetX = (CANVAS_WIDTH - drawnWidth) / 2;
-    const offsetY = (CANVAS_HEIGHT - drawnHeight) / 2;
+    const {
+      x: offsetX,
+      y: offsetY,
+      width: drawnWidth,
+      height: drawnHeight,
+    } = coverRect(video);
     ctx.drawImage(video, offsetX, offsetY, drawnWidth, drawnHeight);
 
     if (face && pose) {
