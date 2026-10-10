@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "MemeHistory",
+  title: "HestoReels",
   description: "Edukacyjny generator memów wideo: viralowy klip, historyczna twarz, sprawdzone fakty.",
 };
 

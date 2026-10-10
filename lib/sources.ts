@@ -18,7 +18,7 @@ interface WikiArticle {
 }
 
 // Wikimedia mocno limituje anonimowe, generyczne User-Agenty; ustaw własny z kontaktem.
-const USER_AGENT = process.env.WIKIPEDIA_USER_AGENT ?? "MemeHistory/0.1 (hackathon project)";
+const USER_AGENT = process.env.WIKIPEDIA_USER_AGENT ?? "HestoReels/0.1 (hackathon project)";
 const FETCH_TIMEOUT_MS = 5000;
 // Wstępy artykułów bywają długie; obcinamy na granicy akapitu. Weryfikacja
 // cytatów działa na tym samym, obciętym tekście, który widzi model.
