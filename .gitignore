@@ -41,5 +41,11 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+# cache analiz i generacji
+/data/cache/
+
+# samodzielna binarka yt-dlp (pobierana przez scripts/setup-ytdlp.mjs)
+/bin/
+
 # mediapipe (kopiowane przez scripts/setup-mediapipe.mjs)
 /public/mediapipe/

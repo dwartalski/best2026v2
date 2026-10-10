@@ -1,5 +1,5 @@
 {
-  "name": "memehistory",
+  "name": "hestoreels",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -7,17 +7,19 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "postinstall": "node scripts/setup-mediapipe.mjs",
+    "postinstall": "node scripts/setup-mediapipe.mjs && node scripts/setup-ytdlp.mjs",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.133.0",
     "@mediapipe/tasks-vision": "^1.1.0",
+    "ffmpeg-static": "^5.3.0",
     "framer-motion": "^14.1.0",
     "lucide-react": "^1.55.0",
     "next": "16.4.0",
     "react": "19.3.0",
     "react-dom": "19.3.0",
+    "youtube-dl-exec": "^3.1.17",
     "zod": "^4.6.5"
   },
   "devDependencies": {
