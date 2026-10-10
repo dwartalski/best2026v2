@@ -1,7 +1,8 @@
 import { characters } from "@/data/characters";
 import { templateById, templates } from "@/data/templates";
+import { createFileCache } from "@/lib/fileCache";
 import { generateMeme, LlmError } from "@/lib/llm";
-import { matchCharacter } from "@/lib/matchCharacter";
+import { matchCharacter, normalizeForMatch } from "@/lib/matchCharacter";
 import { buildRetryPrompt, buildUserPrompt } from "@/lib/prompt";
 import {
   GenerateRequestSchema,
@@ -13,6 +14,9 @@ import { collectSources } from "@/lib/sources";
 import { verifyOutput, type VerifyContext } from "@/lib/verify";
 
 export const maxDuration = 60;
+
+// Ponowne kliknięcie z tymi samymi danymi nie woła LLM drugi raz.
+const generationCache = createFileCache<GenerateResponse>("generations");
 
 function errorResponse(code: ApiErrorCode, message: string, status: number) {
   return Response.json({ error: { code, message } } satisfies ApiError, { status });
@@ -28,15 +32,17 @@ export async function POST(request: Request) {
       400,
     );
   }
-  const { mode, userInput, templateId } = parsed.data;
+  const { mode, userInput, templateId, customTemplate } = parsed.data;
 
-  const requiredTemplateId = mode === "text" ? undefined : templateId;
-  if (requiredTemplateId && !templateById.has(requiredTemplateId)) {
+  // Tryb link: jedynym dostępnym szablonem jest tymczasowy szablon z /api/analyze.
+  const availableTemplates = customTemplate ? [customTemplate] : templates;
+  const requiredTemplateId = customTemplate?.id ?? (mode === "text" ? undefined : templateId);
+  if (requiredTemplateId && !customTemplate && !templateById.has(requiredTemplateId)) {
     return errorResponse("TEMPLATE_NOT_FOUND", "Nie ma takiego szablonu.", 404);
   }
 
-  // Tryb text wymaga dopasowania tematu do postaci. W hybrid dopasowanie tylko
-  // zawęża wybór; bez niego (i w trybie video) postać dobiera model.
+  // Tryb text wymaga dopasowania tematu do postaci. W hybrid i link dopasowanie
+  // tylko zawęża wybór; bez niego (i w trybie video) postać dobiera model.
   const matched = userInput ? matchCharacter(userInput, characters) : null;
   if (mode === "text" && !matched) {
     return errorResponse(
@@ -47,18 +53,28 @@ export async function POST(request: Request) {
   }
   const candidates = matched ? [matched] : characters;
 
+  const cacheKey = [
+    requiredTemplateId ?? "any",
+    // Tekst szablonów w kluczu unieważnia cache po edycji szablonu lub nowej analizie klipu.
+    availableTemplates.map((t) => t.textTemplate).join("~"),
+    matched?.id ?? "auto",
+    normalizeForMatch(userInput ?? ""),
+  ].join("|");
+  const cachedResponse = await generationCache.get(cacheKey);
+  if (cachedResponse) return Response.json(cachedResponse);
+
   // Źródła zbieramy PRZED wywołaniem LLM: model widzi wyłącznie te teksty.
   const sources = await collectSources(candidates);
   const context: VerifyContext = {
     sources,
-    templates,
+    templates: availableTemplates,
     allowedCharacterIds: candidates.map((c) => c.id),
     requiredTemplateId,
   };
   const basePrompt = buildUserPrompt({
     mode,
     userInput,
-    templates,
+    templates: availableTemplates,
     characters: candidates,
     sources,
     requiredTemplateId,
@@ -82,14 +98,16 @@ export async function POST(request: Request) {
 
       const result = verifyOutput(output, context);
       if (result.ok) {
-        return Response.json({
+        const response: GenerateResponse = {
           templateId: output.templateId,
           characterId: output.characterId,
           memeText: output.memeText.trim(),
           shortContext: output.shortContext.trim(),
           sources: result.sources,
           insufficientSources: false,
-        } satisfies GenerateResponse);
+        };
+        await generationCache.set(cacheKey, response);
+        return Response.json(response);
       }
 
       console.warn(`[generate] weryfikacja nieudana (próba ${attempt}):`, result.errors);

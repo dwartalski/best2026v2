@@ -1,7 +1,7 @@
 import type { Character, GenerateMode, LlmOutput, MemeTemplate } from "@/lib/schemas";
 import type { Source } from "@/lib/sources";
 
-export const SYSTEM_PROMPT = `Jesteś redaktorem aplikacji MemeHistory. Aplikacja bierze oryginalny klip znanego mema, wkleja na twarz osoby w klipie twarz postaci historycznej i podmienia napis. Twoje zadanie: dobrać postać i szablon oraz napisać tekst mema i krótki kontekst historyczny. Humor pochodzi z szablonu, a fakty wyłącznie ze źródeł, które dostajesz w wiadomości.
+export const SYSTEM_PROMPT = `Jesteś redaktorem aplikacji HestoReels. Aplikacja bierze oryginalny klip znanego mema, wkleja na twarz osoby w klipie twarz postaci historycznej i podmienia napis. Twoje zadanie: dobrać postać i szablon oraz napisać tekst mema i krótki kontekst historyczny. Humor pochodzi z szablonu, a fakty wyłącznie ze źródeł, które dostajesz w wiadomości.
 
 # Źródła i fakty
 Używaj tylko faktów z dostarczonych źródeł. Jeśli źródła nie wystarczą, zwróć insufficientSources: true zamiast zgadywać.
@@ -57,6 +57,11 @@ function describeTask({ mode, userInput, characters, requiredTemplateId }: Promp
     lines.push("Wybierz szablon, którego vibe najlepiej pasuje do tego tematu.");
   } else if (mode === "video") {
     lines.push("Użytkownik wybrał klip i nie podał tematu.");
+    lines.push(
+      "Odczytaj vibe szablonu i dobierz postać oraz wydarzenie historyczne, które pasują do tych emocji.",
+    );
+  } else if (mode === "link" && !userInput) {
+    lines.push("Użytkownik zaimportował własny klip i nie podał tematu.");
     lines.push(
       "Odczytaj vibe szablonu i dobierz postać oraz wydarzenie historyczne, które pasują do tych emocji.",
     );
