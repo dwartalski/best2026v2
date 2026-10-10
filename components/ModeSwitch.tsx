@@ -1,13 +1,14 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Clapperboard, Shuffle, Type, type LucideIcon } from "lucide-react";
+import { Clapperboard, Link2, Shuffle, Type, type LucideIcon } from "lucide-react";
 import type { GenerateMode } from "@/lib/schemas";
 
 const MODES: { id: GenerateMode; label: string; icon: LucideIcon }[] = [
   { id: "text", label: "Wpisz temat", icon: Type },
   { id: "video", label: "Wybierz Reelsa", icon: Clapperboard },
   { id: "hybrid", label: "Hybrydowy", icon: Shuffle },
+  { id: "link", label: "Wklej link", icon: Link2 },
 ];
 
 interface ModeSwitchProps {
@@ -18,7 +19,7 @@ interface ModeSwitchProps {
 
 export function ModeSwitch({ mode, onChange, disabled }: ModeSwitchProps) {
   return (
-    <div role="tablist" className="grid grid-cols-3 gap-1 rounded-2xl bg-zinc-900 p-1">
+    <div role="tablist" className="grid grid-cols-4 gap-1 rounded-2xl bg-zinc-900 p-1">
       {MODES.map(({ id, label, icon: Icon }) => {
         const active = id === mode;
         return (
@@ -29,7 +30,7 @@ export function ModeSwitch({ mode, onChange, disabled }: ModeSwitchProps) {
             aria-selected={active}
             disabled={disabled}
             onClick={() => onChange(id)}
-            className={`relative flex flex-col items-center gap-1 rounded-xl px-2 py-2 text-xs font-medium transition-colors disabled:opacity-50 ${
+            className={`relative flex flex-col items-center gap-1 rounded-xl px-1 py-2 text-[11px] leading-tight font-medium transition-colors disabled:opacity-50 ${
               active ? "text-white" : "text-zinc-400 hover:text-zinc-200"
             }`}
           >

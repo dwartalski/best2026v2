@@ -1,12 +1,12 @@
 "use client";
 
 import { LoaderCircle, Sparkles } from "lucide-react";
-import type { FormEvent } from "react";
+import type { FormEvent, ReactNode } from "react";
 import { ModeSwitch } from "@/components/ModeSwitch";
 import { TemplateGrid } from "@/components/TemplateGrid";
 import type { GenerateMode, MemeTemplate } from "@/lib/schemas";
 
-const INPUT_COPY: Record<Exclude<GenerateMode, "video">, { label: string; placeholder: string }> = {
+const INPUT_COPY: Record<"text" | "hybrid", { label: string; placeholder: string }> = {
   text: { label: "Temat", placeholder: "np. Henryk VIII" },
   hybrid: { label: "Luźny kontekst", placeholder: "np. coś o Napoleonie i zimie" },
 };
@@ -21,6 +21,8 @@ interface GeneratorFormProps {
   onTemplateSelect: (templateId: string) => void;
   loading: boolean;
   onSubmit: () => void;
+  /** Panel trybu "Wklej link"; ma własne pola i przyciski zamiast wspólnego formularza. */
+  linkPanel: ReactNode;
 }
 
 export function GeneratorForm({
@@ -33,6 +35,7 @@ export function GeneratorForm({
   onTemplateSelect,
   loading,
   onSubmit,
+  linkPanel,
 }: GeneratorFormProps) {
   const needsInput = mode !== "video";
   const needsTemplate = mode !== "text";
@@ -43,6 +46,15 @@ export function GeneratorForm({
     event.preventDefault();
     if (canSubmit) onSubmit();
   };
+
+  if (mode === "link") {
+    return (
+      <div className="flex flex-col gap-3">
+        <ModeSwitch mode={mode} onChange={onModeChange} disabled={loading} />
+        {linkPanel}
+      </div>
+    );
+  }
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-3">
